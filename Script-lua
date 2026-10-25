@@ -1,0 +1,576 @@
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ProximityPromptService = game:GetService("ProximityPromptService")
+local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local TeleportService = game:GetService("TeleportService")
+local Workspace = game:GetService("Workspace")
+local function resolveObjectsRoot()
+	return Workspace:FindFirstChild("World") or Workspace:FindFirstChild("__OBJECTS")
+end
+local runtimeEnv = getgenv and getgenv() or _G
+if type(runtimeEnv.__SenaV4HubShutdown) == "function" then
+	pcall(runtimeEnv.__SenaV4HubShutdown)
+end
+local hubSession = {}
+runtimeEnv.__SenaV4HubSession = hubSession
+local function sessionAlive()
+	return runtimeEnv.__SenaV4HubSession == hubSession
+end
+do
+	local TAMPER_API = { "hookfunction", "hookmetamethod", "getconnections", "getgc", "getrawmetatable",
+		"firetouchinterest", "newcclosure", "getnamecallmethod", "checkcaller", "getcallingscript" }
+	local iscclosureFn = runtimeEnv.iscclosure or rawget(_G, "iscclosure")
+	local isHookedFn = runtimeEnv.isfunctionhooked or rawget(_G, "isfunctionhooked")
+	local baseline = {}
+	for _, name in ipairs(TAMPER_API) do baseline[name] = runtimeEnv[name] end
+	local function wrapped(fn)
+		if type(fn) ~= "function" then return false end
+		if type(iscclosureFn) == "function" then
+			local ok, isC = pcall(iscclosureFn, fn)
+			if ok and isC == false then return true end
+		end
+		if type(isHookedFn) == "function" then
+			local ok, hooked = pcall(isHookedFn, fn)
+			if ok and hooked == true then return true end
+		end
+		return false
+	end
+	local function tampered()
+		for _, name in ipairs(TAMPER_API) do
+			local current = runtimeEnv[name]
+			if current ~= baseline[name] or wrapped(current) then return "api:" .. name end
+		end
+		local getmt = baseline.getrawmetatable
+		if type(getmt) == "function" then
+			local ok, mt = pcall(getmt, game)
+			if ok and type(mt) == "table" then
+				for _, key in ipairs({ "__namecall", "__index", "__newindex" }) do
+					if wrapped(rawget(mt, key)) then return "mt:" .. key end
+				end
+			end
+		end
+		local probe = Instance.new("RemoteEvent")
+		local probeFn = Instance.new("RemoteFunction")
+		local hit
+		if wrapped(probe.FireServer) then hit = "remote:FireServer"
+		elseif wrapped(probeFn.InvokeServer) then hit = "remote:InvokeServer" end
+		probe:Destroy()
+		probeFn:Destroy()
+		return hit
+	end
+	local function rejoin(reason)
+		if runtimeEnv.__SenaV4TamperRejoining then return end
+		runtimeEnv.__SenaV4TamperRejoining = true
+		warn("[Sena] tamper detected (" .. tostring(reason) .. ") - rejoining")
+		pcall(function() TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer) end)
+		task.delay(5, function()
+			pcall(function() TeleportService:Teleport(game.PlaceId, LocalPlayer) end)
+		end)
+	end
+	local okFirst, first = pcall(tampered)
+	if okFirst and first then rejoin(first) end
+	task.spawn(function()
+		while sessionAlive() do
+			task.wait(3)
+			local ok, hit = pcall(tampered)
+			if ok and hit then rejoin(hit) break end
+		end
+	end)
+end
+runtimeEnv.__SenaV4IdentityGetter = runtimeEnv.getthreadidentity
+or runtimeEnv.get_thread_identity
+or runtimeEnv.getidentity
+or runtimeEnv.getthreadcontext
+or runtimeEnv.get_thread_context
+runtimeEnv.__SenaV4IdentitySetter = runtimeEnv.setthreadidentity
+or runtimeEnv.set_thread_identity
+or runtimeEnv.setidentity
+or runtimeEnv.setthreadcontext
+or runtimeEnv.set_thread_context
+do
+	local setter = runtimeEnv.__SenaV4IdentitySetter
+	if type(setter) == "function" then
+		pcall(setter, 8)
+		runtimeEnv.__SenaV4UICapabilityIdentity = 8
+	end
+	local setCap = rawget(_G, "setfpscap") or rawget(_G, "set_fps_cap") or (type(setfpscap) == "function" and setfpscap)
+	runtimeEnv.__SenaV4SetCapFps = function(num)
+		local target = tonumber(num) or 240
+		target = math.clamp(math.floor(target), 1, 1000)
+		local fn = rawget(_G, "setfpscap") or rawget(_G, "set_fps_cap") or (type(setfpscap) == "function" and setfpscap)
+		if type(fn) == "function" then
+			return pcall(fn, target)
+		end
+		return false
+	end
+end
+if type(runtimeEnv.__SenaV4TweenRuntimeCleanup) == "function" then
+	pcall(runtimeEnv.__SenaV4TweenRuntimeCleanup)
+end
+if type(runtimeEnv.__SenaV4EggRuntimeCleanup) == "function" then
+	pcall(runtimeEnv.__SenaV4EggRuntimeCleanup)
+end
+if type(runtimeEnv.__SenaV4AntiGuardCleanup) == "function" then
+	pcall(runtimeEnv.__SenaV4AntiGuardCleanup)
+end
+runtimeEnv.__SenaV4TweenRuntimeGeneration = (runtimeEnv.__SenaV4TweenRuntimeGeneration or 0) + 1
+local tweenRuntimeGeneration = runtimeEnv.__SenaV4TweenRuntimeGeneration
+local SPOOF_CFG = {
+	KEY = "__SenaV4StealAnEggMovementSpoof",
+	VERSION = 436,
+	INTEGRITY_KEY = "__SenaV4StealAnEggIntegritySpoof",
+	SIGNAL = "ClientCharacter: GetDebugSnapshot",
+	HEADROOM = 1.35,
+	CLAMP = 0.15,
+	PADDING = 24,
+	MULTIPLIER = 10,
+	MIN_INPUT = 20,
+	MAX_INPUT = 100,
+	DEF_INPUT = 60,
+	MIN_SPEED = 200,
+	MAX_SPEED = 1000,
+	DEF_SPEED = 600,
+	FIELDS = {
+		"LastObservedSample", "LastSample", "LastGoodSample",
+		"LastGameplayTrustedSample", "LastValidatedSample",
+		"LastValidatedGroundedSample", "LastConfirmedGroundSample",
+		"CandidateGroundedSample"
+	}
+}
+local MOVEMENT_SPOOF_KEY = SPOOF_CFG.KEY
+local MOVEMENT_SPOOF_VERSION = SPOOF_CFG.VERSION
+local INTEGRITY_SPOOF_KEY = SPOOF_CFG.INTEGRITY_KEY
+local INTEGRITY_SIGNAL_NAME = SPOOF_CFG.SIGNAL
+local INTEGRITY_SPEED_HEADROOM = SPOOF_CFG.HEADROOM
+local LONG_FRAME_CLAMP = SPOOF_CFG.CLAMP
+local MOVEMENT_BASELINE_PADDING = SPOOF_CFG.PADDING
+local MOVEMENT_SPEED_MULTIPLIER = SPOOF_CFG.MULTIPLIER
+local MIN_MOVEMENT_SPEED_INPUT = SPOOF_CFG.MIN_INPUT
+local MAX_MOVEMENT_SPEED_INPUT = SPOOF_CFG.MAX_INPUT
+local DEFAULT_MOVEMENT_SPEED_INPUT = SPOOF_CFG.DEF_INPUT
+local MIN_MOVEMENT_SPEED = SPOOF_CFG.MIN_SPEED
+local MAX_MOVEMENT_SPEED = SPOOF_CFG.MAX_SPEED
+local DEFAULT_MOVEMENT_SPEED = SPOOF_CFG.DEF_SPEED
+local INTEGRITY_SAMPLE_FIELDS = SPOOF_CFG.FIELDS
+local _fpsEstimate = 60
+do
+	local RunService = game:GetService("RunService")
+	RunService.Heartbeat:Connect(function(dt)
+		if dt and dt > 0 then
+			_fpsEstimate = _fpsEstimate * 0.9 + (1 / dt) * 0.1
+		end
+	end)
+end
+local function currentFps() return _fpsEstimate end
+runtimeEnv.__SenaV4NetPing = function()
+	local ms = 0
+	pcall(function() ms = game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue() end)
+	return tonumber(ms) or 0
+end
+local HOVER_PAD_SIZE_XZ = 8
+local HOVER_PAD_THICKNESS = 1
+local HOVER_PAD_NAME = "__SenaV4HoverPad"
+local HOVER_PAD_OWNER_ATTRIBUTE = "SenaV4RuntimeOwner"
+local hoverPadInstance = nil
+local hoverPadOwnerId = tostring(math.random(100000, 999999))
+local hoverPadConnection = nil
+local hoverPadPostConnection = nil
+local activeMoves = {}
+local tweenArrivalHold = nil
+local Config
+local speedDialStuds
+local function purgeOrphanHoverPads()
+	for _, obj in ipairs(Workspace:GetChildren()) do
+		if obj:IsA("BasePart") and obj.Name == HOVER_PAD_NAME and obj ~= hoverPadInstance then
+			pcall(obj.Destroy, obj)
+		end
+	end
+end
+local function syncHoverPad(targetPos)
+	if not hoverPadInstance or not hoverPadInstance.Parent then return false end
+	local character = LocalPlayer.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	if not root or not humanoid then return false end
+	local rootPosition = typeof(targetPos) == "Vector3" and targetPos or root.Position
+	local feetOffset = humanoid.RigType == Enum.HumanoidRigType.R15
+	and (root.Size.Y * 0.5 + math.max(humanoid.HipHeight, 0.5))
+	or (root.Size.Y * 0.5 + 2)
+	hoverPadInstance.CFrame = CFrame.new(
+		rootPosition.X,
+		rootPosition.Y - feetOffset - HOVER_PAD_THICKNESS * 0.5 - 0.05,
+		rootPosition.Z
+	)
+	return true
+end
+local function startHoverPad()
+	if not hoverPadInstance or not hoverPadInstance.Parent or hoverPadInstance:GetAttribute(HOVER_PAD_OWNER_ATTRIBUTE) ~= hoverPadOwnerId then
+		purgeOrphanHoverPads()
+		if hoverPadInstance and hoverPadInstance.Parent then pcall(hoverPadInstance.Destroy, hoverPadInstance) end
+		local part = Instance.new("Part")
+		part.Name = HOVER_PAD_NAME
+		part:SetAttribute(HOVER_PAD_OWNER_ATTRIBUTE, hoverPadOwnerId)
+		part.Anchored = true
+		part.CanCollide = true
+		part.CanQuery = true
+		part.CanTouch = false
+		part.CastShadow = false
+		part.Transparency = 1
+		part.Material = Enum.Material.SmoothPlastic
+		part.Size = Vector3.new(HOVER_PAD_SIZE_XZ, HOVER_PAD_THICKNESS, HOVER_PAD_SIZE_XZ)
+		hoverPadInstance = part
+		part.Parent = Workspace
+	end
+	syncHoverPad()
+	if not hoverPadConnection then
+		hoverPadConnection = RunService.PreSimulation:Connect(function()
+			if not syncHoverPad() then startHoverPad() end
+			end)
+	end
+	if not hoverPadPostConnection then
+		hoverPadPostConnection = RunService.PostSimulation:Connect(function()
+			syncHoverPad()
+			end)
+	end
+end
+local function stopHoverPad()
+	if hoverPadConnection then
+		pcall(hoverPadConnection.Disconnect, hoverPadConnection)
+		hoverPadConnection = nil
+	end
+	if hoverPadPostConnection then
+		pcall(hoverPadPostConnection.Disconnect, hoverPadPostConnection)
+		hoverPadPostConnection = nil
+	end
+	if hoverPadInstance then
+		pcall(hoverPadInstance.Destroy, hoverPadInstance)
+		hoverPadInstance = nil
+	end
+	purgeOrphanHoverPads()
+end
+stopHoverPad()
+local function clearTweenArrivalHold()
+	tweenArrivalHold = nil
+end
+local function setTweenArrivalHold(root, destination)
+	if root and typeof(destination) == "CFrame" then
+		tweenArrivalHold = {
+			Character = LocalPlayer.Character,
+			RootPart = root,
+			CFrame = destination,
+		}
+	end
+end
+local function enforceTweenArrivalHold()
+	local hold = tweenArrivalHold
+	if type(hold) ~= "table" or typeof(hold.CFrame) ~= "CFrame" then return false end
+	if LocalPlayer.Character ~= hold.Character or not hold.RootPart or not hold.RootPart.Parent then
+		tweenArrivalHold = nil
+		return false
+	end
+	startHoverPad()
+	hold.RootPart.AssemblyLinearVelocity = Vector3.zero
+	hold.RootPart.AssemblyAngularVelocity = Vector3.zero
+	syncHoverPad(hold.CFrame.Position)
+	hold.RootPart.CFrame = hold.CFrame
+	syncHoverPad(hold.CFrame.Position)
+	return true
+end
+local function stopAllActiveMovements()
+	local char = LocalPlayer.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	for _, move in pairs(activeMoves) do
+		if type(move) == "table" then
+			move.cancelled = true
+		end
+	end
+	table.clear(activeMoves)
+	if hrp then
+		hrp.AssemblyLinearVelocity = Vector3.zero
+		hrp.AssemblyAngularVelocity = Vector3.zero
+	end
+	clearTweenArrivalHold()
+	stopHoverPad()
+end
+runtimeEnv.__SenaV4TweenRuntimeCleanup = function()
+	for _, move in pairs(activeMoves) do
+		if type(move) == "table" then move.cancelled = true end
+	end
+	table.clear(activeMoves)
+	clearTweenArrivalHold()
+	stopHoverPad()
+end
+local function environment()
+	return getgenv and getgenv() or _G
+end
+local function getMovementSpoof()
+	local env = environment()
+	local existing = env[MOVEMENT_SPOOF_KEY]
+	if type(existing) ~= "table" or existing.Version ~= MOVEMENT_SPOOF_VERSION then
+		if type(existing) == "table" then existing.Enabled = false end
+		existing = {
+			Version = MOVEMENT_SPOOF_VERSION,
+			Installed = false,
+			Enabled = false,
+			Mode = "StateBaseline",
+			Humanoid = nil,
+			RootPart = nil,
+			WalkSpeed = DEFAULT_MOVEMENT_SPEED,
+		}
+		env[MOVEMENT_SPOOF_KEY] = existing
+	end
+	return existing
+end
+local function setMovementSpoof(character, speed)
+	local holder = getMovementSpoof()
+	if not holder then return false end
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	holder.Humanoid = humanoid
+	holder.RootPart = root
+	holder.WalkSpeed = math.clamp(
+		tonumber(speed) or DEFAULT_MOVEMENT_SPEED,
+		MIN_MOVEMENT_SPEED,
+		MAX_MOVEMENT_SPEED * INTEGRITY_SPEED_HEADROOM
+	)
+	holder.Enabled = false
+	return humanoid ~= nil and root ~= nil
+end
+local function clearMovementSpoof()
+	local holder = environment()[MOVEMENT_SPOOF_KEY]
+	if type(holder) == "table" then
+		holder.Enabled = false
+		holder.Humanoid = nil
+		holder.RootPart = nil
+	end
+end
+local function findIntegrityStateNow(player, humanoid, root)
+	local found = nil
+	if type(getcallbackvalue) == "function" and type(debug) == "table" and type(debug.getupvalue) == "function" then
+		local signalModule = ReplicatedStorage:FindFirstChild("Packages")
+		and ReplicatedStorage.Packages:FindFirstChild("Signal")
+		if signalModule then
+			local okSig, Signal = pcall(require, signalModule)
+			if okSig and type(Signal) == "table" and type(Signal.Invoked) == "function" then
+				local okBind, bindable = pcall(Signal.Invoked, INTEGRITY_SIGNAL_NAME)
+				if okBind and bindable then
+					local okCb, callback = pcall(getcallbackvalue, bindable, "OnInvoke")
+					if okCb and type(callback) == "function" then
+						local okInfo, info = pcall(debug.getinfo, callback)
+						if okInfo then
+							local function scan(value, depth, seen)
+								if found or type(value) ~= "table" or depth > 3 or seen[value] then return end
+								seen[value] = true
+								if rawget(value, "Player") == player
+								and rawget(value, "Character") == player.Character
+								and rawget(value, "Humanoid") == humanoid
+								and rawget(value, "RootPart") == root
+								and type(rawget(value, "SampleHistory")) == "table"
+								and type(rawget(value, "Evidence")) == "table"
+								then
+									found = value
+									return
+								end
+								local scanned = 0
+								for _, child in pairs(value) do
+									scanned = scanned + 1
+									if scanned > 128 then break end
+									if type(child) == "table" then scan(child, depth + 1, seen) end
+								end
+							end
+							for idx = 1, info.nups or 0 do
+								local okUp, upvalue = pcall(debug.getupvalue, callback, idx)
+								if okUp and type(upvalue) == "table" then
+									scan(upvalue, 0, {})
+									if found then break end
+								end
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+	if not found and type(getgc) == "function" then
+		local okGc, objects = pcall(getgc, true)
+		if okGc and type(objects) == "table" then
+			for _, obj in ipairs(objects) do
+				if type(obj) == "table"
+				and rawget(obj, "Player") == player
+				and rawget(obj, "Character") == player.Character
+				and rawget(obj, "Humanoid") == humanoid
+				and rawget(obj, "RootPart") == root
+				and type(rawget(obj, "SampleHistory")) == "table"
+				and type(rawget(obj, "Evidence")) == "table"
+				then
+					found = obj
+					break
+				end
+			end
+		end
+	end
+	return found
+end
+local integrityScanTop = { busy = false, nextAt = 0, misses = 0, found = nil }
+local function findIntegrityState(player, humanoid, root)
+	local cached = integrityScanTop.found
+	if type(cached) == "table"
+	and rawget(cached, "Player") == player
+	and rawget(cached, "Character") == player.Character
+	and rawget(cached, "Humanoid") == humanoid
+	and rawget(cached, "RootPart") == root
+	then
+		return cached
+	end
+	if integrityScanTop.busy or os.clock() < integrityScanTop.nextAt then
+		return nil
+	end
+	integrityScanTop.busy = true
+	task.spawn(function()
+		task.wait()
+		local ok, found = pcall(findIntegrityStateNow, player, humanoid, root)
+		found = ok and found or nil
+		integrityScanTop.found = found
+		integrityScanTop.misses = found and 0 or integrityScanTop.misses + 1
+		integrityScanTop.nextAt = os.clock() + (found and 0.2 or (integrityScanTop.misses >= 5 and 10 or 1))
+		integrityScanTop.busy = false
+		end)
+	return nil
+end
+local function patchIntegrityState(state, speed, travelVelocity)
+	if type(state) ~= "table" then return false end
+	local root = rawget(state, "RootPart")
+	local rootCFrame = root and root.Parent and root.CFrame or nil
+	local rootPosition = rootCFrame and rootCFrame.Position or nil
+	local coherentVelocity = typeof(travelVelocity) == "Vector3" and travelVelocity or Vector3.zero
+	local function patchSample(sample)
+		if type(sample) == "table" then
+			rawset(sample, "WalkSpeed", speed)
+			if rootCFrame then
+				rawset(sample, "CFrame", rootCFrame)
+				rawset(sample, "Position", rootPosition)
+				rawset(sample, "LinearVelocity", coherentVelocity)
+				rawset(sample, "AngularVelocity", Vector3.zero)
+			end
+		end
+	end
+	for _, field in ipairs(INTEGRITY_SAMPLE_FIELDS) do
+		patchSample(rawget(state, field))
+	end
+	for _, sample in pairs(rawget(state, "SampleHistory") or {}) do
+		patchSample(sample)
+	end
+	for _, sample in pairs(rawget(state, "SafeGroundCheckpoints") or {}) do
+		patchSample(sample)
+	end
+	local evidence = rawget(state, "Evidence")
+	if type(evidence) == "table" then
+		evidence.Speed = 0
+		evidence.Teleport = 0
+		evidence.Flight = 0
+	end
+	local impulse = rawget(state, "ImpulseContext")
+	if type(impulse) == "table" then
+		local horizontalSpeed = math.max(tonumber(impulse.MaxHorizontalSpeed) or 0, speed)
+		local duration = math.max(
+			(tonumber(impulse.ExpiresAt) or 0) - (tonumber(impulse.StartedAt) or 0),
+			LONG_FRAME_CLAMP
+		)
+		impulse.MaxHorizontalSpeed = horizontalSpeed
+		if rootPosition then impulse.OriginPosition = rootPosition end
+		impulse.MaxHorizontalDistance = math.max(
+			tonumber(impulse.MaxHorizontalDistance) or 0,
+			horizontalSpeed * duration + MOVEMENT_BASELINE_PADDING * 2
+		)
+		patchSample(impulse.PreMovementSafeSample)
+	end
+	if rawget(state, "CorrectionContext") == nil then
+		rawset(state, "FirstSuspiciousAt", nil)
+		if rawget(state, "ThreatLevel") == "Observing" then
+			rawset(state, "ThreatLevel", "Trusted")
+		end
+	end
+	return true
+end
+local function getIntegritySpoof()
+	local env = environment()
+	local holder = env[INTEGRITY_SPOOF_KEY]
+	if type(holder) ~= "table" then
+		holder = {}
+		env[INTEGRITY_SPOOF_KEY] = holder
+	end
+	return holder
+end
+local function integrityStateMatches(state, humanoid, root)
+	return type(state) == "table"
+	and rawget(state, "Player") == LocalPlayer
+	and rawget(state, "Character") == LocalPlayer.Character
+	and rawget(state, "Humanoid") == humanoid
+	and rawget(state, "RootPart") == root
+end
+local function integrityStateCanTravel(state, humanoid, root)
+	return integrityStateMatches(state, humanoid, root)
+end
+local function setIntegritySpoof(humanoid, root, speed)
+	local holder = getIntegritySpoof()
+	local state = holder.State
+	if not integrityStateMatches(state, humanoid, root) then
+		local now = os.clock()
+		if now < (holder.NextSearchAt or 0) then return false end
+		holder.NextSearchAt = now + 0.2
+		state = findIntegrityState(LocalPlayer, humanoid, root)
+	end
+	if not state then
+		return false
+	end
+	if not integrityStateCanTravel(state, humanoid, root) then
+		holder.Enabled = false
+		holder.Humanoid = humanoid
+		holder.RootPart = root
+		holder.State = state
+		return false
+	end
+	holder.NextSearchAt = 0
+	holder.Enabled = true
+	holder.Humanoid = humanoid
+	holder.RootPart = root
+	holder.State = state
+	holder.WalkSpeed = math.clamp(
+		speed * INTEGRITY_SPEED_HEADROOM,
+		MIN_MOVEMENT_SPEED,
+		MAX_MOVEMENT_SPEED * INTEGRITY_SPEED_HEADROOM
+	)
+	holder.TravelVelocity = Vector3.zero
+	patchIntegrityState(state, holder.WalkSpeed, holder.TravelVelocity)
+	return true
+end
+local function refreshIntegritySpoof(humanoid, root, speed, travelVelocity)
+	local holder = environment()[INTEGRITY_SPOOF_KEY]
+	if type(holder) ~= "table"
+	or not holder.Enabled
+	or holder.Humanoid ~= humanoid
+	or holder.RootPart ~= root
+	or not integrityStateCanTravel(holder.State, humanoid, root)
+	then
+		return false
+	end
+	holder.WalkSpeed = math.clamp(
+		speed * INTEGRITY_SPEED_HEADROOM,
+		MIN_MOVEMENT_SPEED,
+		MAX_MOVEMENT_SPEED * INTEGRITY_SPEED_HEADROOM
+	)
+	if typeof(travelVelocity) == "Vector3" then
+		holder.TravelVelocity = travelVelocity
+	elseif typeof(holder.TravelVelocity) ~= "Vector3" then
+		holder.TravelVelocity = Vector3.zero
+	end
+	return patchIntegrityState(holder.State, holder.WalkSpeed, holder.TravelVelocity)
+end
+local function clearIntegritySpoof(humanoid)
+	local holder = environment()[INTEGRITY_SPOOF_KEY]
+	if type(holder) ~= "table" then return end
+	if humanoid == nil or holder.Humanoid == humanoid then
+		holder.Enabled = false
+		holde
